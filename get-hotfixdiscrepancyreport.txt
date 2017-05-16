@@ -1,0 +1,97 @@
+<#
+.Synopsis
+   Gathers hotfixes for all computers in a list then returns a list of hotfixes that are only installed on some of the nodes.
+.DESCRIPTION
+   Given a list of computers, this cmdlet verifies each computer is reachable and then gathers a list of hotfixes installed on each computer. It will then either display a table of all hotfixes
+   that are only installed on a subset of the computers specified or, if the DisplayAllHotfixes switch is specified, a table of all hotfixes installed on all computers. The first column
+   is the HotfixID and each other column (property) is the computer name; if the hotfix is installed on that computer it's marked "True", if not it's marked "False".
+.EXAMPLE
+   $computerlist = @("ServerA", "ServerB", "ServerC")
+   Get-HotfixDiscrepancyReport -ComputerList $serverlist
+
+   Generates a hotfix report for three servers.
+.EXAMPLE
+   Get-HotfixDiscrepancyReport -Computerlist ComputerA, ComputerB, ComputerC -DisplayAllHotfixes | Export-CSV .\hfreport.csv
+
+   Lists all hotfixes and whether or not they're installed for three computers and exports the list to a CSV file.
+#>
+function Get-HotfixDiscrepancyReport
+{
+    [CmdletBinding()]
+    [OutputType([PSObject[]])]
+    Param
+    (
+        # A list of computers - can be an array variable or a comma delimited list of computers
+        [Parameter(Mandatory=$true,
+                   ValueFromPipeline=$true,
+                   Position=0)]
+        [Array]$ComputerList,
+
+        # If you want to display all hotfixes instead of just hotfixes that aren't installed on every computer
+        [Switch]$DisplayAllHotfixes
+    )
+
+    Process
+    {
+        Write-Verbose ("" + (TS) + "Verifying computer list")
+        $VerifiedComputers = @()
+        foreach ($computer in $ComputerList)
+        {
+            if(Test-Connection $computer -Count 1 -ErrorAction SilentlyContinue)
+            {
+                $VerifiedComputers += $computer
+            }
+            else
+            {
+                Write-Verbose ("" + (TS) + "$computer failed ping; skipping")
+            }
+        }
+        If ($VerifiedComputers.Count -lt 2)
+        {
+            Write-Error -Message "Not enough computers to generate a report. If your initial list had more than one computer, enable verbose mode to see which computers are failing."
+            return
+        }
+        [hashtable]$InstalledHotfixes = @{}
+        Write-Verbose ("" + (TS) + "Getting hotfixes for " + $VerifiedComputers[0])
+        Get-WmiObject Win32_QuickFixEngineering -Computername $VerifiedComputers[0] | % {
+            $InstalledHotfixes.Add($_.HotfixId, @($VerifiedComputers[0]))
+        }
+        for ($i = 1; $i -lt $VerifiedComputers.Count; $i++)
+        {
+            Write-Verbose ("" + (TS) + "Getting hotfixes for " + $VerifiedComputers[$i])
+            Get-WmiObject Win32_QuickFixEngineering -ComputerName $VerifiedComputers[$i] | % {
+
+                if ($InstalledHotfixes.ContainsKey($_.HotfixID))
+                {
+                    $InstalledHotfixes.Set_Item($_.HotfixID,($InstalledHotfixes.Get_Item($_.HotfixId) + $VerifiedComputers[$i]))
+                }
+                else
+                {
+                    $InstalledHotfixes.Add($_.HotfixId, @($VerifiedComputers[$i]))
+                }
+            }
+        }
+        if (!$DisplayAllHotfixes)
+        {
+            Write-Verbose ("" + (TS) + "Filtering list to only hotfixes not on all nodes")
+            $NewHfList = @{}
+            $InstalledHotfixes.GetEnumerator() | % {if ($_.Value.Count -lt $VerifiedComputers.count) {$NewHfList.Add($_.Key,$_.Value)}}
+        }
+        else
+        {
+            $NewHfList = $InstalledHotfixes
+        }
+        $hfdiscrepancylist = @()
+        Write-Verbose ("" + (TS) + "Creating hotfix list")
+        $NewHfList.GetEnumerator() | % {
+            $hfditem = "" | Select HotfixID
+            $hfditem.HotfixID = $_.Key
+            foreach ($computer in $VerifiedComputers)
+            {
+                $hfditem | Add-Member -NotePropertyName $computer -NotePropertyValue ([boolean]($_.Value -contains $computer))
+            }
+            $hfdiscrepancylist += $hfditem
+        }
+        return $hfdiscrepancylist | Sort-Object HotfixID
+    }
+}
