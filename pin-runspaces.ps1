@@ -1,11 +1,11 @@
 # Define input collection
-$LastOctets = 1..100
+$LastOctets = 1..255
 
 # Define code to run
 $CodeToRun = {
     param($LastOctet)
 
-    $Address = "10.156.22.$LastOctet"
+    $Address = "192.168.178.$LastOctet"
     New-Object -TypeName psobject -Property @{
         Address = $Address
         Status = (Test-Connection -ComputerName $Address -Quiet -Count 1)
